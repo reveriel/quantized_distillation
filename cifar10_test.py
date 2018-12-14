@@ -11,8 +11,8 @@ import quantization.help_functions as qhf
 import functools
 import helpers.functions as mhf
 
-datasets.BASE_DATA_FOLDER = '...'
-SAVED_MODELS_FOLDER = '...'
+datasets.BASE_DATA_FOLDER = '/workspace/mnt/group/video/zhaozhijian/dataset'
+SAVED_MODELS_FOLDER = 'models'
 USE_CUDA = torch.cuda.is_available()
 
 print('CUDA_VISIBLE_DEVICES: {}'.format(os.environ['CUDA_VISIBLE_DEVICES']))
@@ -23,6 +23,7 @@ except:pass
 try:
     os.mkdir(SAVED_MODELS_FOLDER)
 except:pass
+
 
 
 cifar10Manager = model_manager.ModelManager('model_manager_cifar10.tst',
@@ -37,11 +38,11 @@ try:
     os.mkdir(cifar10modelsFolder)
 except:pass
 
-epochsToTrainCIFAR = 200
+epochsToTrainCIFAR = 1
 USE_BATCH_NORM = True
 AFFINE_BATCH_NORM = True
 
-TRAIN_TEACHER_MODEL = False
+TRAIN_TEACHER_MODEL = True
 TRAIN_SMALLER_MODEL = False
 TRAIN_SMALLER_QUANTIZED_MODEL = False
 TRAIN_DISTILLED_MODEL = False
@@ -123,10 +124,11 @@ deeper_student_spec = {'spec_conv_layers': [(76, 3, 3), (76, 3, 3),(76, 3, 3), (
                     'spec_linear': [1000, 1000, 1000], 'width': 32, 'height': 32}
 
 numBits = [4, 2]
+
 #train normal distilled
 # model = convForwModel.ConvolForwardNet(**deeper_student_spec,
-#                                        useBatchNorm=USE_BATCH_NORM,
-#                                        useAffineTransformInBatchNorm=AFFINE_BATCH_NORM)
+#                                         useBatchNorm=USE_BATCH_NORM,
+#                                         useAffineTransformInBatchNorm=AFFINE_BATCH_NORM)
 # model_name = 'cifar10_deeper_normal'
 # model_path = os.path.join(cifar10modelsFolder, model_name)
 # if USE_CUDA: model = model.cuda()

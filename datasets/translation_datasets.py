@@ -1,5 +1,6 @@
 import os
-import urllib.request
+from six.moves import urllib
+#import urllib.request
 import shutil
 import datasets
 import torch

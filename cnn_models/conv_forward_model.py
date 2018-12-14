@@ -17,11 +17,11 @@ import helpers.functions as mhf
 import cnn_models.help_fun as cnn_hf
 import quantization
 import quantization.help_functions
-import sklearn
-import sklearn.tree
-import sklearn.ensemble
-import sklearn.naive_bayes
-import sklearn.linear_model
+#import sklearn
+#import sklearn.tree
+#import sklearn.ensemble
+#import sklearn.naive_bayes
+#import sklearn.linear_model
 
 USE_CUDA = torch.cuda.is_available()
 
@@ -44,7 +44,7 @@ class ConvolForwardNet(nn.Module):
     ''' Teacher model as described in the paper :
     "Do deep convolutional neural network really need to be deep and convolutional?"'''
 
-    def __init__(self, width, height, spec_conv_layers, spec_max_pooling, spec_linear, spec_dropout_rates, useBatchNorm=False,
+    def __init__(self, width, height, spec_conv_layers, spec_max_pooling, spec_linear, spec_dropout_rates,useBatchNorm=False,
                  useAffineTransformInBatchNorm=False):
 
         '''
@@ -83,7 +83,8 @@ class ConvolForwardNet(nn.Module):
             padding = ((kernel_size[0]-1)//2, (kernel_size[1]-1)//2)
             newConvLayer = nn.Conv2d(in_channels=oldNumChannels, out_channels=numFilters,
                                                                     kernel_size=kernel_size, padding=padding)
-            xavier_uniform(newConvLayer.weight, calculate_gain('conv2d')) #glorot weight initialization
+            nn.init.xavier_uniform_(newConvLayer.weight, calculate_gain('conv2d')) #glorot weight initialization
+            #if USE_CUDA: newConvLayer.weight = newConvLayer.weight.cuda()
             self.conv_layers.append(newConvLayer)
             self.batchNormalizationLayers.append(nn.BatchNorm2d(numFilters,
                                                             affine=useAffineTransformInBatchNorm))
@@ -114,7 +115,8 @@ class ConvolForwardNet(nn.Module):
         for idx in range(len(spec_linear)):
             currNumFeatures = spec_linear[idx]
             newLinearLayer = nn.Linear(in_features=oldInputFeatures, out_features=currNumFeatures)
-            xavier_uniform(newLinearLayer.weight, calculate_gain('linear'))  # glorot weight initialization
+            nn.init.xavier_uniform_(newLinearLayer.weight, calculate_gain('linear'))  # glorot weight initialization
+            #if USE_CUDA: newLinearLayer.weight = newLinearLayer.weight.cuda()
             self.linear_layers.append(newLinearLayer)
             self.batchNormalizationLayers.append(nn.BatchNorm1d(currNumFeatures,
                                                                                  affine=useAffineTransformInBatchNorm))
@@ -122,7 +124,8 @@ class ConvolForwardNet(nn.Module):
 
         #final output layer
         self.out_layer = nn.Linear(in_features=oldInputFeatures, out_features=10)
-        xavier_uniform(self.out_layer.weight, calculate_gain('linear'))
+        nn.init.xavier_uniform_(self.out_layer.weight, calculate_gain('linear'))
+        #if USE_CUDA: self.out_layer.weight = self.out_layer.weight.cuda()
 
 
         self.conv_layers = nn.ModuleList(self.conv_layers)
@@ -134,7 +137,6 @@ class ConvolForwardNet(nn.Module):
         self.total_num_layers = self.num_conv_layers + len(self.linear_layers)
 
     def forward(self, input):
-
         for idx in range(self.total_num_layers):
             if idx < self.num_conv_layers:
                 input = Functional.relu(self.conv_layers[idx](input))
@@ -271,6 +273,9 @@ def train_model(model, train_loader, test_loader, initial_learning_rate = 0.001,
     try:
         epoch = start_epoch
         for epoch in range(start_epoch, epochs_to_train+start_epoch):
+            print("begin training")
+            if USE_CUDA:
+                print("USE_CUDA")
             if mix_with_differentiable_quantization:
                 print('=== Starting Quantized Distillation epoch === ')
             model.train()
