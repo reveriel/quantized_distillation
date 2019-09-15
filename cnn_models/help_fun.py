@@ -31,7 +31,8 @@ def evaluateModel(model, testLoader, fastEvaluation=True, maxExampleFastEvaluati
 
     'if fastEvaluation is True, it will only check a subset of *maxExampleFastEvaluation* images of the test set'
 
-
+    if USE_CUDA:
+        model = model.cuda()
     model.eval()
     correctClass = 0
     totalNumExamples = 0
@@ -79,9 +80,11 @@ def forward_and_backward(model, batch, idx_batch, epoch, criterion=None,
     inputs, labels = batch
     # wrap them in Variable
     inputs, labels = Variable(inputs), Variable(labels)
+
     if USE_CUDA:
         inputs = inputs.cuda()
         labels = labels.cuda()
+        model = model.cuda()
 
     # forward + backward + optimize
     outputs = model(inputs)
@@ -112,8 +115,14 @@ def forward_and_backward(model, batch, idx_batch, epoch, criterion=None,
         else:
             raise ValueError('ask_teacher_strategy is incorrectly formatted')
 
-        index_distillation_loss = torch.arange(0, outputs.size(0))[mask_distillation_loss.view(-1, 1)].long()
-        inverse_idx_distill_loss = torch.arange(0, outputs.size(0))[1-mask_distillation_loss.view(-1, 1)].long()
+        #print(mask_distillation_loss.view(-1))
+        #print(torch.arange(0, outputs.size(0)).size())
+        
+        #print(outputs.size())
+        #index_distillation_loss = torch.arange(0, outputs.size(0))[mask_distillation_loss.view(-1, 1)].long()
+        #inverse_idx_distill_loss = torch.arange(0, outputs.size(0))[1-mask_distillation_loss.view(-1, 1)].long()
+        index_distillation_loss = torch.arange(0, outputs.size(0))[mask_distillation_loss.view(-1)].long()
+        inverse_idx_distill_loss = torch.arange(0, outputs.size(0))[1-mask_distillation_loss.view(-1)].long()
         if USE_CUDA:
             index_distillation_loss = index_distillation_loss.cuda()
             inverse_idx_distill_loss = inverse_idx_distill_loss.cuda()
@@ -140,12 +149,14 @@ def forward_and_backward(model, batch, idx_batch, epoch, criterion=None,
         else:
             loss_masked = 0
 
-        if inverse_idx_distill_loss.size() != torch.Size():
+        if inverse_idx_distill_loss.size() != torch.Size([0]):
             #if inverse_idx_distill is not empty
             loss_normal = criterion(outputs[inverse_idx_distill_loss, :], labels[inverse_idx_distill_loss])
         else:
             loss_normal = 0
+
         loss = loss_masked + loss_normal
+
     else:
         loss = criterion(outputs, labels)
 
@@ -153,9 +164,9 @@ def forward_and_backward(model, batch, idx_batch, epoch, criterion=None,
 
     if return_more_info:
         count_total = inputs.size(0)
-        return loss.data[0], count_asked_teacher, count_total
+        return loss.data, count_asked_teacher, count_total
     else:
-        return loss.data[0]
+        return loss.data
 
 def add_gradient_noise(model, idx_batch, epoch, number_minibatches_per_epoch):
     # Adding random gaussian noise as in the paper "Adding gradient noise improves learning
