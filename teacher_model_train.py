@@ -6,13 +6,13 @@ def __mkdir(path):
     if not os.path.exists(path):
         os.mkdir(path)
 
-datasets.BASE_DATA_FOLDER = '/workspace/mnt/group/video/zhaozhijian/dataset'
+datasets.BASE_DATA_FOLDER = 'data'
 
 batch_size = 50
 epochsToTrainCIFAR = 100
 TRAIN_TEACHER_MODEL = False
-TRAIN_DISTILLED_MODEL = False
-TRAIN_SMALLER_MODEL = False
+TRAIN_DISTILLED_MODEL = True
+TRAIN_SMALLER_MODEL = True
 TRAIN_DISTILLED_QUANTIZED_MODEL = True
 
 cifar10 = datasets.CIFAR10() #-> will be saved in /home/saved_datasets/cifar10
@@ -55,7 +55,7 @@ if not model_name in cifar10Manager.saved_models:
 model_path  = cifar10Manager.saved_models[model_name][0][0]
 print(model_path)
 if TRAIN_TEACHER_MODEL:
-    
+
     cifar10Manager.train_model(teacherModel, model_name=model_name,
                             train_function=convForwModel.train_model,
                             arguments_train_function={'epochs_to_train': epochsToTrainCIFAR},
@@ -95,7 +95,7 @@ if not small_model_name in cifar10Manager.saved_models:
 
 
 if TRAIN_SMALLER_MODEL:
-   
+
     cifar10Manager.train_model(smallerModel, model_name=small_model_name,
                                     train_function=convForwModel.train_model,
                                     arguments_train_function={'epochs_to_train': epochsToTrainCIFAR},
@@ -134,7 +134,7 @@ if TRAIN_DISTILLED_MODEL:
 
 print("Eval DISTILLED model")
 
-distilledModel.load_state_dict(cifar10Manager.load_model_state_dict(distilled_model_name))                                        
+distilledModel.load_state_dict(cifar10Manager.load_model_state_dict(distilled_model_name))
 acc = cnn_hf.evaluateModel(distilledModel, test_loader, k=1)
 print("Top-1 eval acc is {}".format(acc))
 

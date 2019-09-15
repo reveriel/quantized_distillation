@@ -18,11 +18,15 @@ archivePrefix = "arXiv",
 ```
 
 
-The code is written in [Pytorch 0.3](http://pytorch.org/) using Python 3.6. It is not backward compatible with Python2.x
+<!-- The code is written in [Pytorch 0.3](http://pytorch.org/) using Python 3.6. It is not backward compatible with Python2.x -->
 
-*Note* Pytorch 0.4 introduced some major breaking changes. To use this code, please use Pytorch 0.3.
+<!-- *Note* Pytorch 0.4 introduced some major breaking changes. To use this code, please use Pytorch 0.3. -->
 
-Check for the compatible version of torchvision. To run the code, use torchvision 0.2.0.
+<!-- Check for the compatible version of torchvision. To run the code, use torchvision 0.2.0. -->
+
+support pytorch 1.1
+
+
 ```
 pip install torchvision==0.2.0
 ```
@@ -96,7 +100,7 @@ cifar10Manager.train_model(teacherModel, model_name=model_name,
                            train_function=convForwModel.train_model,
                            arguments_train_function={'epochs_to_train': 200},
                            train_loader=train_loader, test_loader=test_loader)
-```         
+```
 
 This is the general structure necessary to use the code. For more examples, please look at one of the main files that are used to run the experiments.
 
