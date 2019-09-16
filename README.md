@@ -27,10 +27,9 @@ archivePrefix = "arXiv",
 support pytorch 1.1
 
 
-```
-pip install torchvision==0.2.0
-```
-This should be done after installing the [requirements](requirements.txt).
+<!-- pip install torchvision==0.2.0 -->
+
+<!-- This should be done after installing the [requirements](requirements.txt). -->
 
 # Getting started
 
