@@ -326,7 +326,7 @@ def train_model(model, train_loader, test_loader, initial_learning_rate = 0.001,
                         quantize_weights_model(model)
 
                 model.zero_grad()
-                print_loss, curr_c_teach, curr_c_total = cnn_hf.forward_and_backward(model, data, idx_minibatch, epoch,
+                print_loss, curr_c_teach, curr_c_total = forward_and_backward(model, data, idx_minibatch, epoch,
                                             use_distillation_loss=use_distillation_loss,
                                             teacher_model=teacher_model,
                                             ask_teacher_strategy=ask_teacher_strategy,
@@ -374,7 +374,7 @@ def train_model(model, train_loader, test_loader, initial_learning_rate = 0.001,
             curr_percentages_asked_teacher = count_asked_teacher/count_asked_total if count_asked_total != 0 else 0
             percentages_asked_teacher.append(curr_percentages_asked_teacher)
             losses_epochs.append(last_loss_saved)
-            curr_pred_accuracy = cnn_hf.evaluateModel(model, test_loader, fastEvaluation=False)
+            curr_pred_accuracy = evaluateModel(model, test_loader, fastEvaluation=False)
             pred_accuracy_epochs.append(curr_pred_accuracy)
             print(' === Epoch: {} - prediction accuracy {:2f}% === '.format(epoch + 1, curr_pred_accuracy*100))
 
@@ -391,7 +391,7 @@ def train_model(model, train_loader, test_loader, initial_learning_rate = 0.001,
                 model.load_state_dict(model_state_dict)
                 del model_state_dict  # free memory
                 losses_epochs.append(last_loss_saved)
-                curr_pred_accuracy = cnn_hf.evaluateModel(model, test_loader, fastEvaluation=False)
+                curr_pred_accuracy = evaluateModel(model, test_loader, fastEvaluation=False)
                 pred_accuracy_epochs.append(curr_pred_accuracy)
                 print(' === Epoch: {} - prediction accuracy {:2f}% === '.format(epoch + 1, curr_pred_accuracy * 100))
 
@@ -601,7 +601,7 @@ def optimize_quantization_points(modelToQuantize, train_loader, test_loader, ini
                 print_loss_total = 0
 
         losses_epochs.append(last_loss_saved)
-        curr_pred_accuracy = cnn_hf.evaluateModel(quantizedModel, test_loader, fastEvaluation=False)
+        curr_pred_accuracy = evaluateModel(quantizedModel, test_loader, fastEvaluation=False)
         pred_accuracy_epochs.append(curr_pred_accuracy)
         print(' === Epoch: {} - prediction accuracy {:2f}% === '.format(epoch + 1, curr_pred_accuracy * 100))
 
@@ -630,7 +630,155 @@ def optimize_quantization_points(modelToQuantize, train_loader, test_loader, ini
 
     return quantizedModel.state_dict(), pointsPerTensor, informationDict
 
+def forward_and_backward(model, batch, idx_batch, epoch, criterion=None,
+                         use_distillation_loss=False, teacher_model=None,
+                         temperature_distillation=2, ask_teacher_strategy='always',
+                         return_more_info=False):
+    """
+    batch: batch of data
+    """
 
+    #TODO: return_more_info is just there for backward compatibility. A big refactoring is due here, and there one should
+    #remove the return_more_info flag
+
+    if criterion is None:
+        criterion = nn.CrossEntropyLoss()
+    if USE_CUDA:
+        criterion = criterion.cuda()
+
+    if use_distillation_loss is True and teacher_model is None:
+        raise ValueError('To compute distillation loss you need to pass the teacher model')
+
+    if not isinstance(ask_teacher_strategy, tuple):
+        ask_teacher_strategy = (ask_teacher_strategy, )
+
+    inputs, labels = batch
+    labels = labels[:, 0]
+    inputs = inputs.transpose(2, 1)
+    # wrap them in Variable
+    inputs, labels = Variable(inputs), Variable(labels)
+
+    if USE_CUDA:
+        inputs = inputs.cuda()
+        labels = labels.cuda()
+        model = model.cuda()
+
+    # forward + backward + optimize
+    # outputs = model(inputs)
+    outputs, trans, trans_feat = model(inputs)
+
+    count_asked_teacher = 0
+
+    if use_distillation_loss:
+        #if cutoff_entropy_value_distillation is not None, we use the distillation loss only on the examples
+        #whose entropy is higher than the cutoff.
+
+        weight_teacher_loss = 0.7
+
+        if 'entropy' in ask_teacher_strategy[0].lower():
+            prob_out = torch.nn.functional.softmax(outputs).data
+            entropy = [mhf.get_entropy(prob_out[idx_b, :]) for idx_b in range(prob_out.size(0))]
+
+        if ask_teacher_strategy[0].lower() == 'always':
+            mask_distillation_loss = torch.ByteTensor([True]*outputs.size(0))
+        elif ask_teacher_strategy[0].lower() == 'cutoff_entropy':
+            cutoff_entropy_value_distillation = ask_teacher_strategy[1]
+            mask_distillation_loss = torch.ByteTensor([entr > cutoff_entropy_value_distillation for entr in entropy])
+        elif ask_teacher_strategy[0].lower() == 'random_entropy':
+            max_entropy = math.log2(outputs.size(1)) #max possible entropy that happens with uniform distribution
+            mask_distillation_loss = torch.ByteTensor([random.random() < entr/max_entropy for entr in entropy])
+        elif ask_teacher_strategy[0].lower() == 'incorrect_labels':
+            _, predictions = outputs.max(dim=1)
+            mask_distillation_loss = (predictions != labels).data.cpu()
+        else:
+            raise ValueError('ask_teacher_strategy is incorrectly formatted')
+
+        #print(mask_distillation_loss.view(-1))
+        #print(torch.arange(0, outputs.size(0)).size())
+
+        #print(outputs.size())
+        #index_distillation_loss = torch.arange(0, outputs.size(0))[mask_distillation_loss.view(-1, 1)].long()
+        #inverse_idx_distill_loss = torch.arange(0, outputs.size(0))[1-mask_distillation_loss.view(-1, 1)].long()
+        index_distillation_loss = torch.arange(0, outputs.size(0))[mask_distillation_loss.view(-1)].long()
+        inverse_idx_distill_loss = torch.arange(0, outputs.size(0))[1-mask_distillation_loss.view(-1)].long()
+        if USE_CUDA:
+            index_distillation_loss = index_distillation_loss.cuda()
+            inverse_idx_distill_loss = inverse_idx_distill_loss.cuda()
+
+        # this criterion is the distillation criterion according to Hinton's paper:
+        # "Distilling the Knowledge in a Neural Network", Hinton et al.
+
+        softmaxFunction, logSoftmaxFunction, KLDivLossFunction  = nn.Softmax(dim=1), nn.LogSoftmax(dim=1), nn.KLDivLoss()
+        if USE_CUDA:
+            softmaxFunction, logSoftmaxFunction = softmaxFunction.cuda(), logSoftmaxFunction.cuda(),
+            KLDivLossFunction = KLDivLossFunction.cuda()
+
+        if index_distillation_loss.size() != torch.Size():
+            count_asked_teacher = index_distillation_loss.numel()
+            # if index_distillation_loss is not empty
+            volatile_inputs = Variable(inputs.data[index_distillation_loss, :], requires_grad=False)
+            if USE_CUDA: volatile_inputs = volatile_inputs.cuda()
+            outputsTeacher = teacher_model(volatile_inputs).detach()
+            loss_masked = weight_teacher_loss * temperature_distillation**2 * KLDivLossFunction(
+                    logSoftmaxFunction(outputs[index_distillation_loss, :]/ temperature_distillation),
+                    softmaxFunction(outputsTeacher / temperature_distillation))
+            loss_masked += (1-weight_teacher_loss) * criterion(outputs[index_distillation_loss, :],
+                                                               labels[index_distillation_loss])
+        else:
+            loss_masked = 0
+
+        if inverse_idx_distill_loss.size() != torch.Size([0]):
+            #if inverse_idx_distill is not empty
+            loss_normal = criterion(outputs[inverse_idx_distill_loss, :], labels[inverse_idx_distill_loss])
+        else:
+            loss_normal = 0
+
+        loss = loss_masked + loss_normal
+
+    else:
+        loss = criterion(outputs, labels)
+
+    loss.backward()
+
+    if return_more_info:
+        count_total = inputs.size(0)
+        return loss.data, count_asked_teacher, count_total
+    else:
+        return loss.data
+
+def evaluateModel(model, testLoader, fastEvaluation=True, maxExampleFastEvaluation=10000, k=1):
+
+    'if fastEvaluation is True, it will only check a subset of *maxExampleFastEvaluation* images of the test set'
+
+    if USE_CUDA:
+        model = model.cuda()
+    model.eval()
+    correctClass = 0
+    totalNumExamples = 0
+
+    for idx_minibatch, data in enumerate(testLoader):
+
+        # get the inputs
+        inputs, labels = data
+        inputs = inputs.transpose(2,1)
+        labels = labels[:, 0]
+        inputs, labels = Variable(inputs, volatile=True), Variable(labels)
+        if USE_CUDA:
+            inputs = inputs.cuda()
+            labels = labels.cuda()
+
+        outputs, trans, trans_feat = model(inputs)
+
+        _, topk_predictions = outputs.topk(k, dim=1, largest=True, sorted=True)
+        topk_predictions = topk_predictions.t()
+        correct = topk_predictions.eq(labels.view(1, -1).expand_as(topk_predictions))
+        correctClass += correct.view(-1).float().sum(0, keepdim=True).data[0]
+        totalNumExamples += len(labels)
+
+        if fastEvaluation is True and totalNumExamples > maxExampleFastEvaluation:
+            break
+
+    return correctClass / totalNumExamples
 
 
 
