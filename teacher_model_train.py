@@ -140,7 +140,7 @@ print("Top-1 eval acc is {}".format(acc))
 
 
 if TRAIN_DISTILLED_QUANTIZED_MODEL :
-    numBits = [1]
+    numBits = [8]
     for numBit in numBits:
         distilled_quantized_model_name = 'cifar10_distilled_spec2_quantized{}bits'.format(numBit)
 
