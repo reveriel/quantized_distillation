@@ -1,6 +1,5 @@
 # import datasets
 import model_manager
-import cnn_models.help_fun as cnn_hf
 import cnn_models.conv_forward_model as convForwModel
 import os
 import copy
@@ -20,10 +19,10 @@ def __mkdir(path):
 
 batch_size = 50
 # epochsToTrainCIFAR = 100
-epochsToTrain = 40
-TRAIN_TEACHER_MODEL = True
+epochsToTrain = 10
+TRAIN_TEACHER_MODEL = False
 TRAIN_DISTILLED_MODEL = False
-TRAIN_SMALLER_MODEL = False
+TRAIN_SMALLER_MODEL = True
 TRAIN_DISTILLED_QUANTIZED_MODEL = False
 
 # cifar10 = datasets.CIFAR10() #->
@@ -142,55 +141,53 @@ if TRAIN_TEACHER_MODEL:
 print("Eval Teacher model")
 print(model_name)
 teacherModel.load_state_dict(pointNetManager.load_model_state_dict(model_name))
-acc = cnn_hf.evaluateModel(teacherModel, test_loader, k=1)
+acc = pointnet.model.evaluateModel(teacherModel, test_loader, k=1)
 print("Top-1 eval acc is {}".format(acc))
 
+small_model_name = "small_pointnet_same"
+smallerModelPath = os.path.join(model_save_path, small_model_name)
+smallerModel = PointNetCls(
+    k=num_classes, feature_transform=opt.feature_transform)
 
-# smallerModelPath = os.path.join(model_save_path, small_model_name)
 # smallerModel = convForwModel.ConvolForwardNet(**model_small_spec,
 #                                               useBatchNorm=True,
 #                                               useAffineTransformInBatchNorm=True)
-# if not small_model_name in pointNetManager.saved_models:
-#     pointNetManager.add_new_model(small_model_name, smallerModelPath,
-#                                  arguments_creator_function={**model_small_spec,
-#                                                              'useBatchNorm': True,
+if not small_model_name in pointNetManager.saved_models:
+    pointNetManager.add_new_model(small_model_name, smallerModelPath,
+                                  arguments_creator_function={'k': num_classes,
+                                                              'feature_transform': opt.feature_transform})
 #                                                              'useAffineTransformInBatchNorm': True})
 
 if TRAIN_SMALLER_MODEL:
-
     pointNetManager.train_model(smallerModel, model_name=small_model_name,
-                                train_function=convForwModel.train_model,
+                                train_function=pointnet.model.train_model,
                                 arguments_train_function={
                                     'epochs_to_train': epochsToTrain},
                                 train_loader=train_loader, test_loader=test_loader)
     print("SMALLER Model Training complete")
     smallerModel.load_state_dict(
         pointNetManager.load_model_state_dict(small_model_name))
-    acc = cnn_hf.evaluateModel(smallerModel, test_loader, k=1)
+    acc = pointnet.model.evaluateModel(smallerModel, test_loader, k=1)
     print("Top-1 eval acc of smaller model is {}".format(acc))
 
 
-distilled_model_name = 'cifar10_distilled_spec2'
-distilledModelSpec = copy.deepcopy(smallerModelSpec2)
+distilled_model_name = 'distill_pointnet'
+# distilledModelSpec = copy.deepcopy(smallerModelSpec2)
 # no dropout with distilled model
-distilledModelSpec['spec_dropout_rates'] = []
+# distilledModelSpec['spec_dropout_rates'] = []
 
 distilledModelPath = os.path.join(model_save_path, distilled_model_name)
-distilledModel = convForwModel.ConvolForwardNet(**distilledModelSpec,
-                                                useBatchNorm=True,
-                                                useAffineTransformInBatchNorm=True)
+distilledModel = PointNetCls(
+    k=num_classes, feature_transform=opt.feature_transform)
 
 if not distilled_model_name in pointNetManager.saved_models:
     pointNetManager.add_new_model(distilled_model_name, distilledModelPath,
-                                  arguments_creator_function={**distilledModelSpec,
-                                                              'useBatchNorm': True,
-                                                              'useAffineTransformInBatchNorm': True})
-
+                                  arguments_creator_function={'k': num_classes, 'feature_transform': opt.feature_transform})
 
 if TRAIN_DISTILLED_MODEL:
 
     pointNetManager.train_model(distilledModel, model_name=distilled_model_name,
-                                train_function=convForwModel.train_model,
+                                train_function=pointnet.model.train_model,
                                 arguments_train_function={'epochs_to_train': epochsToTrain,
                                                           'teacher_model': teacherModel,
                                                           'use_distillation_loss': True},
@@ -201,7 +198,7 @@ print("Eval DISTILLED model")
 
 distilledModel.load_state_dict(
     pointNetManager.load_model_state_dict(distilled_model_name))
-acc = cnn_hf.evaluateModel(distilledModel, test_loader, k=1)
+acc = pointnet.model.evaluateModel(distilledModel, test_loader, k=1)
 print("Top-1 eval acc is {}".format(acc))
 
 
@@ -213,9 +210,9 @@ if TRAIN_DISTILLED_QUANTIZED_MODEL:
 
         distilled_quantized_model_path = os.path.join(
             model_save_path, distilled_quantized_model_name)
-        distilled_quantized_model = convForwModel.ConvolForwardNet(**distilledModelSpec,
-                                                                   useBatchNorm=True,
-                                                                   useAffineTransformInBatchNorm=True)
+        distilled_quantized_model = pointnet.model.ConvolForwardNet(**distilledModelSpec,
+                                                                    useBatchNorm=True,
+                                                                    useAffineTransformInBatchNorm=True)
         if not distilled_quantized_model_name in pointNetManager.saved_models:
             pointNetManager.add_new_model(distilled_quantized_model_name, distilled_quantized_model_path,
                                           arguments_creator_function={**distilledModelSpec,
@@ -223,7 +220,7 @@ if TRAIN_DISTILLED_QUANTIZED_MODEL:
                                                                       'useAffineTransformInBatchNorm': True})
 
         pointNetManager.train_model(distilled_quantized_model, model_name=distilled_quantized_model_name,
-                                    train_function=convForwModel.train_model,
+                                    train_function=pointnet.model.train_model,
                                     arguments_train_function={'epochs_to_train': epochsToTrain,
                                                               'teacher_model': teacherModel,
                                                               'use_distillation_loss': True,
@@ -233,5 +230,6 @@ if TRAIN_DISTILLED_QUANTIZED_MODEL:
                                     train_loader=train_loader, test_loader=test_loader)
         distilled_quantized_model.load_state_dict(
             pointNetManager.load_model_state_dict(distilled_quantized_model_name))
-        acc = cnn_hf.evaluateModel(distilled_quantized_model, test_loader, k=1)
+        acc = pointnet.model.evaluateModel(
+            distilled_quantized_model, test_loader, k=1)
         print("Top-1 eval {} acc is {}".format(distilled_quantized_model_name, acc))
