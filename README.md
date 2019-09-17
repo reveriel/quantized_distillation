@@ -1,3 +1,23 @@
+# PointNet
+
+PointNet 来自 https://github.com/fxia22/pointnet.pytorch,
+
+已将 pointnet.pytorch 目录下的 pointnet 模型放入本目录
+
+执行 `./script/download.sh` 下载 shapenet 数据集.
+
+运行: 执行 `./run.sh`. 在 pointnet 数据集上运行 `pointnet_train.py`,
+
+`pointnet_train.py` 中，通过设置下面的 bool 变量选择要训练的模型。
+目前仅测试过 teacher model.
+
+``` python
+TRAIN_TEACHER_MODEL = True
+TRAIN_DISTILLED_MODEL = False
+TRAIN_SMALLER_MODEL = False
+TRAIN_DISTILLED_QUANTIZED_MODEL = False
+```
+
 #  Model compression via distillation and quantization
 
 This code has been written to experiment with quantized distillation and differentiable quantization, techniques developed in our paper ["Model compression via distillation and quantization"](https://arxiv.org/abs/1802.05668).
