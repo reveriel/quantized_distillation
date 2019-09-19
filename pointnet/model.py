@@ -24,10 +24,16 @@ USE_CUDA = torch.cuda.is_available()
 
 
 class STN3d(nn.Module):
-    def __init__(self, conv_widths = [64,128,1024],  fc_widths = [1024,512,256]):
-        # conv_width :
-        #
+    def __init__(self, conv_widths=[64, 128, 1024],  fc_widths=[1024, 512, 256]):
+        # input : a tensor of n * 3
+        # output: a 3 x 3 matrix
         super(STN3d, self).__init__()
+        assert len(conv_widths) > 0 and  len(fc_widths) > 0 and conv_widths[-1] == fc_widths[0]
+        self.convs = []
+        self.convs.append(torch.nn.Conv1d(3, conv_width[]))
+
+        for i in range(len(conv_widths)):
+            self.convs.append(torch.nn.Conv1d(conv_widhth, width, i))
 
         self.conv1 = torch.nn.Conv1d(3, 64, 1)
         self.conv2 = torch.nn.Conv1d(64, 128, 1)
@@ -43,7 +49,6 @@ class STN3d(nn.Module):
         self.bn4 = nn.BatchNorm1d(512)
         self.bn5 = nn.BatchNorm1d(256)
 
-
     def forward(self, x):
         batchsize = x.size()[0]
         x = F.relu(self.bn1(self.conv1(x)))
@@ -56,7 +61,8 @@ class STN3d(nn.Module):
         x = F.relu(self.bn5(self.fc2(x)))
         x = self.fc3(x)
 
-        iden = Variable(torch.from_numpy(np.array([1,0,0,0,1,0,0,0,1]).astype(np.float32))).view(1,9).repeat(batchsize,1)
+        iden = Variable(torch.from_numpy(np.array([1, 0, 0, 0, 1, 0, 0, 0, 1]).astype(
+            np.float32))).view(1, 9).repeat(batchsize, 1)
         if x.is_cuda:
             iden = iden.cuda()
         x = x + iden
@@ -95,15 +101,17 @@ class STNkd(nn.Module):
         x = F.relu(self.bn5(self.fc2(x)))
         x = self.fc3(x)
 
-        iden = Variable(torch.from_numpy(np.eye(self.k).flatten().astype(np.float32))).view(1,self.k*self.k).repeat(batchsize,1)
+        iden = Variable(torch.from_numpy(np.eye(self.k).flatten().astype(
+            np.float32))).view(1, self.k*self.k).repeat(batchsize, 1)
         if x.is_cuda:
             iden = iden.cuda()
         x = x + iden
         x = x.view(-1, self.k, self.k)
         return x
 
+
 class PointNetfeat(nn.Module):
-    def __init__(self, global_feat = True, feature_transform = False):
+    def __init__(self, global_feat=True, feature_transform=False):
         super(PointNetfeat, self).__init__()
         self.stn = STN3d()
         self.conv1 = torch.nn.Conv1d(3, 64, 1)
@@ -127,9 +135,9 @@ class PointNetfeat(nn.Module):
 
         if self.feature_transform:
             trans_feat = self.fstn(x)
-            x = x.transpose(2,1)
+            x = x.transpose(2, 1)
             x = torch.bmm(x, trans_feat)
-            x = x.transpose(2,1)
+            x = x.transpose(2, 1)
         else:
             trans_feat = None
 
@@ -144,11 +152,13 @@ class PointNetfeat(nn.Module):
             x = x.view(-1, 1024, 1).repeat(1, 1, n_pts)
             return torch.cat([x, pointfeat], 1), trans, trans_feat
 
+
 class PointNetCls(nn.Module):
     def __init__(self, k=2, feature_transform=False):
         super(PointNetCls, self).__init__()
         self.feature_transform = feature_transform
-        self.feat = PointNetfeat(global_feat=True, feature_transform=feature_transform)
+        self.feat = PointNetfeat(
+            global_feat=True, feature_transform=feature_transform)
         self.fc1 = nn.Linear(1024, 512)
         self.fc2 = nn.Linear(512, 256)
         self.fc3 = nn.Linear(256, k)
@@ -163,12 +173,14 @@ class PointNetCls(nn.Module):
         x = F.relu(self.bn2(self.dropout(self.fc2(x))))
         x = self.fc3(x)
         return F.log_softmax(x, dim=1), trans, trans_feat
+
 
 class PointNetCls_small(nn.Module):
     def __init__(self, k=2, feature_transform=False):
         super(PointNetCls, self).__init__()
         self.feature_transform = feature_transform
-        self.feat = PointNetfeat(global_feat=True, feature_transform=feature_transform)
+        self.feat = PointNetfeat(
+            global_feat=True, feature_transform=feature_transform)
         self.fc1 = nn.Linear(1024, 512)
         self.fc2 = nn.Linear(512, 256)
         self.fc3 = nn.Linear(256, k)
@@ -185,13 +197,13 @@ class PointNetCls_small(nn.Module):
         return F.log_softmax(x, dim=1), trans, trans_feat
 
 
-
 class PointNetDenseCls(nn.Module):
-    def __init__(self, k = 2, feature_transform=False):
+    def __init__(self, k=2, feature_transform=False):
         super(PointNetDenseCls, self).__init__()
         self.k = k
-        self.feature_transform=feature_transform
-        self.feat = PointNetfeat(global_feat=False, feature_transform=feature_transform)
+        self.feature_transform = feature_transform
+        self.feat = PointNetfeat(
+            global_feat=False, feature_transform=feature_transform)
         self.conv1 = torch.nn.Conv1d(1088, 512, 1)
         self.conv2 = torch.nn.Conv1d(512, 256, 1)
         self.conv3 = torch.nn.Conv1d(256, 128, 1)
@@ -208,10 +220,11 @@ class PointNetDenseCls(nn.Module):
         x = F.relu(self.bn2(self.conv2(x)))
         x = F.relu(self.bn3(self.conv3(x)))
         x = self.conv4(x)
-        x = x.transpose(2,1).contiguous()
-        x = F.log_softmax(x.view(-1,self.k), dim=-1)
+        x = x.transpose(2, 1).contiguous()
+        x = F.log_softmax(x.view(-1, self.k), dim=-1)
         x = x.view(batchsize, n_pts, self.k)
         return x, trans, trans_feat
+
 
 def feature_transform_regularizer(trans):
     d = trans.size()[1]
@@ -219,10 +232,12 @@ def feature_transform_regularizer(trans):
     I = torch.eye(d)[None, :, :]
     if trans.is_cuda:
         I = I.cuda()
-    loss = torch.mean(torch.norm(torch.bmm(trans, trans.transpose(2,1)) - I, dim=(1,2)))
+    loss = torch.mean(torch.norm(
+        torch.bmm(trans, trans.transpose(2, 1)) - I, dim=(1, 2)))
     return loss
 
-def train_model(model, train_loader, test_loader, initial_learning_rate = 0.001, use_nesterov=True,
+
+def train_model(model, train_loader, test_loader, initial_learning_rate=0.001, use_nesterov=True,
                 initial_momentum=0.9, weight_decayL2=0.00022, epochs_to_train=100, print_every=500,
                 learning_rate_style='generic', use_distillation_loss=False, teacher_model=None,
                 quantizeWeights=False, numBits=8, grad_clipping_threshold=False, start_epoch=0,
@@ -238,13 +253,15 @@ def train_model(model, train_loader, test_loader, initial_learning_rate = 0.001,
     # to compute
 
     if use_distillation_loss is True and teacher_model is None:
-        raise ValueError('To compute distillation loss you have to pass the teacher model')
+        raise ValueError(
+            'To compute distillation loss you have to pass the teacher model')
 
     if teacher_model is not None:
         teacher_model.eval()
 
     learning_rate_style = learning_rate_style.lower()
-    lr_scheduler = cnn_hf.LearningRateScheduler(initial_learning_rate, learning_rate_style)
+    lr_scheduler = cnn_hf.LearningRateScheduler(
+        initial_learning_rate, learning_rate_style)
     new_learning_rate = initial_learning_rate
     optimizer = optim.SGD(model.parameters(), lr=initial_learning_rate, nesterov=use_nesterov,
                           momentum=initial_momentum, weight_decay=weight_decayL2)
@@ -270,25 +287,27 @@ def train_model(model, train_loader, test_loader, initial_learning_rate = 0.001,
             s = 2 ** numBits
             type_of_scaling = 'linear'
         else:
-            raise ValueError('The specified quantization function is not present')
+            raise ValueError(
+                'The specified quantization function is not present')
 
         if backprop_quantization_style is None or backprop_quantization_style in ('none', 'truncated'):
-            quantizeFunctions = lambda x: quantization.uniformQuantization(x, s,
-                                                    type_of_scaling=type_of_scaling,
-                                                    stochastic_rounding=False,
-                                                    max_element=False,
-                                                    subtract_mean=False,
-                                                    modify_in_place=False, bucket_size=bucket_size)[0]
+            def quantizeFunctions(x): return quantization.uniformQuantization(x, s,
+                                                                              type_of_scaling=type_of_scaling,
+                                                                              stochastic_rounding=False,
+                                                                              max_element=False,
+                                                                              subtract_mean=False,
+                                                                              modify_in_place=False, bucket_size=bucket_size)[0]
 
         elif backprop_quantization_style == 'complicated':
             quantizeFunctions = [quantization.uniformQuantization_variable(s, type_of_scaling=type_of_scaling,
-                                                    stochastic_rounding=False,
-                                                    max_element=False,
-                                                    subtract_mean=False,
-                                                    modify_in_place=False, bucket_size=bucket_size) \
+                                                                           stochastic_rounding=False,
+                                                                           max_element=False,
+                                                                           subtract_mean=False,
+                                                                           modify_in_place=False, bucket_size=bucket_size)
                                  for _ in model.parameters()]
         else:
-            raise ValueError('The specified backprop_quantization_style not recognized')
+            raise ValueError(
+                'The specified backprop_quantization_style not recognized')
 
         num_parameters = sum(1 for _ in model.parameters())
 
@@ -296,7 +315,7 @@ def train_model(model, train_loader, test_loader, initial_learning_rate = 0.001,
             for idx, p in enumerate(model.parameters()):
                 if quantize_first_and_last_layer is False:
                     if idx == 0 or idx == num_parameters-1:
-                        continue #don't quantize first and last layer
+                        continue  # don't quantize first and last layer
                 if backprop_quantization_style == 'truncated':
                     p.data.clamp_(-1, 1)
                 if backprop_quantization_style in ('none', 'truncated'):
@@ -313,7 +332,7 @@ def train_model(model, train_loader, test_loader, initial_learning_rate = 0.001,
             for idx, p in enumerate(model.parameters()):
                 if quantize_first_and_last_layer is False:
                     if idx == 0 or idx == num_parameters-1:
-                        continue #don't quantize first and last layer
+                        continue  # don't quantize first and last layer
 
                 # Now some sort of backward. For the none style, we don't do anything.
                 # for the truncated style, we just need to truncate the grad weights
@@ -351,27 +370,29 @@ def train_model(model, train_loader, test_loader, initial_learning_rate = 0.001,
 
                 model.zero_grad()
                 print_loss, curr_c_teach, curr_c_total = forward_and_backward(model, data, idx_minibatch, epoch,
-                                            use_distillation_loss=use_distillation_loss,
-                                            teacher_model=teacher_model,
-                                            ask_teacher_strategy=ask_teacher_strategy,
-                                            return_more_info=True)
+                                                                              use_distillation_loss=use_distillation_loss,
+                                                                              teacher_model=teacher_model,
+                                                                              ask_teacher_strategy=ask_teacher_strategy,
+                                                                              return_more_info=True)
                 count_asked_teacher += curr_c_teach
                 count_asked_total += curr_c_total
 
-                #load the non-quantize weights and use them for the update. The quantized
-                #weights are used only to get the quantized gradient
+                # load the non-quantize weights and use them for the update. The quantized
+                # weights are used only to get the quantized gradient
                 if quantizeWeights:
                     if step_since_last_grad_quant_estimation >= estimate_quant_grad_every:
                         model.load_state_dict(model_state_dict)
-                        del model_state_dict #free memory
+                        del model_state_dict  # free memory
 
                 if add_gradient_noise and not quantizeWeights:
-                    cnn_hf.add_gradient_noise(model, idx_minibatch, epoch, number_minibatches_per_epoch)
+                    cnn_hf.add_gradient_noise(
+                        model, idx_minibatch, epoch, number_minibatches_per_epoch)
 
                 if grad_clipping_threshold is not False:
                     # gradient clipping
                     for p in model.parameters():
-                        p.grad.data.clamp_(-grad_clipping_threshold, grad_clipping_threshold)
+                        p.grad.data.clamp_(-grad_clipping_threshold,
+                                           grad_clipping_threshold)
 
                 if quantizeWeights:
                     if step_since_last_grad_quant_estimation >= estimate_quant_grad_every:
@@ -391,46 +412,54 @@ def train_model(model, train_loader, test_loader, initial_learning_rate = 0.001,
                     str_to_print = 'Time Elapsed: {}, [Start Epoch: {}, Epoch: {}, Minibatch: {}], loss: {:3f}'.format(
                         mhf.timeSince(startTime), start_epoch+1, epoch + 1, idx_minibatch, last_loss_saved)
                     if pred_accuracy_epochs:
-                        str_to_print += ' Last prediction accuracy: {:2f}%'.format(pred_accuracy_epochs[-1]*100)
+                        str_to_print += ' Last prediction accuracy: {:2f}%'.format(
+                            pred_accuracy_epochs[-1]*100)
                     print(str_to_print)
                     print_loss_total = 0
 
-            curr_percentages_asked_teacher = count_asked_teacher/count_asked_total if count_asked_total != 0 else 0
+            curr_percentages_asked_teacher = count_asked_teacher / \
+                count_asked_total if count_asked_total != 0 else 0
             percentages_asked_teacher.append(curr_percentages_asked_teacher)
             losses_epochs.append(last_loss_saved)
-            curr_pred_accuracy = evaluateModel(model, test_loader, fastEvaluation=False)
+            curr_pred_accuracy = evaluateModel(
+                model, test_loader, fastEvaluation=False)
             pred_accuracy_epochs.append(curr_pred_accuracy)
-            print(' === Epoch: {} - prediction accuracy {:2f}% === '.format(epoch + 1, curr_pred_accuracy*100))
+            print(' === Epoch: {} - prediction accuracy {:2f}% === '.format(epoch +
+                                                                            1, curr_pred_accuracy*100))
 
             if mix_with_differentiable_quantization and epoch != start_epoch + epochs_to_train - 1:
                 print('=== Starting Differentiable Quantization epoch === ')
-                #the diff quant step is not done at the last epoch, so we end on a quantized distillation epoch
+                # the diff quant step is not done at the last epoch, so we end on a quantized distillation epoch
                 model_state_dict = optimize_quantization_points(model, train_loader, test_loader, new_learning_rate,
-                                            initial_momentum=initial_momentum, epochs_to_train=1, print_every=print_every,
-                                            use_nesterov=use_nesterov,
-                                            learning_rate_style=learning_rate_style, numPointsPerTensor=2**numBits,
-                                            assignBitsAutomatically=True, bucket_size=bucket_size,
-                                            use_distillation_loss=True, initialize_method='quantiles',
-                                            quantize_first_and_last_layer=quantize_first_and_last_layer)[0]
+                                                                initial_momentum=initial_momentum, epochs_to_train=1, print_every=print_every,
+                                                                use_nesterov=use_nesterov,
+                                                                learning_rate_style=learning_rate_style, numPointsPerTensor=2**numBits,
+                                                                assignBitsAutomatically=True, bucket_size=bucket_size,
+                                                                use_distillation_loss=True, initialize_method='quantiles',
+                                                                quantize_first_and_last_layer=quantize_first_and_last_layer)[0]
                 model.load_state_dict(model_state_dict)
                 del model_state_dict  # free memory
                 losses_epochs.append(last_loss_saved)
-                curr_pred_accuracy = evaluateModel(model, test_loader, fastEvaluation=False)
+                curr_pred_accuracy = evaluateModel(
+                    model, test_loader, fastEvaluation=False)
                 pred_accuracy_epochs.append(curr_pred_accuracy)
-                print(' === Epoch: {} - prediction accuracy {:2f}% === '.format(epoch + 1, curr_pred_accuracy * 100))
+                print(' === Epoch: {} - prediction accuracy {:2f}% === '.format(
+                    epoch + 1, curr_pred_accuracy * 100))
 
-
-            #updating the learning rate
-            new_learning_rate, stop_training = lr_scheduler.update_learning_rate(epoch, 1-curr_pred_accuracy)
+            # updating the learning rate
+            new_learning_rate, stop_training = lr_scheduler.update_learning_rate(
+                epoch, 1-curr_pred_accuracy)
             if stop_training is True:
                 break
             for p in optimizer.param_groups:
                 try:
                     p['lr'] = new_learning_rate
-                except:pass
+                except:
+                    pass
 
     except Exception as e:
-        print('An exception occurred: {}\n. Training has been stopped after {} epochs.'.format(e, epoch))
+        print('An exception occurred: {}\n. Training has been stopped after {} epochs.'.format(
+            e, epoch))
         informationDict['errorFlag'] = True
         informationDict['numEpochsTrained'] = epoch-start_epoch
 
@@ -445,7 +474,7 @@ def train_model(model, train_loader, test_loader, initial_learning_rate = 0.001,
         informationDict['numEpochsTrained'] = epoch + 1 - start_epoch
 
     if quantizeWeights:
-       quantize_weights_model(model)
+        quantize_weights_model(model)
 
     if mix_with_differentiable_quantization:
         informationDict['numEpochsTrained'] *= 2
@@ -455,7 +484,8 @@ def train_model(model, train_loader, test_loader, initial_learning_rate = 0.001,
     informationDict['lossSaved'] = losses_epochs
     return model, informationDict
 
-def optimize_quantization_points(modelToQuantize, train_loader, test_loader, initial_learning_rate = 1e-5,
+
+def optimize_quantization_points(modelToQuantize, train_loader, test_loader, initial_learning_rate=1e-5,
                                  initial_momentum=0.9, epochs_to_train=30, print_every=500, use_nesterov=True,
                                  learning_rate_style='generic', numPointsPerTensor=16,
                                  assignBitsAutomatically=False, bucket_size=None,
@@ -464,36 +494,37 @@ def optimize_quantization_points(modelToQuantize, train_loader, test_loader, ini
 
     print('Preparing training - pre processing tensors')
 
-
     numTensorsNetwork = sum(1 for _ in modelToQuantize.parameters())
     initialize_method = initialize_method.lower()
     if initialize_method not in ('quantiles', 'uniform'):
-        raise ValueError('The initialization method must be either quantiles or uniform')
+        raise ValueError(
+            'The initialization method must be either quantiles or uniform')
 
     if isinstance(numPointsPerTensor, int):
         numPointsPerTensor = [numPointsPerTensor] * numTensorsNetwork
 
     if len(numPointsPerTensor) != numTensorsNetwork:
-        raise ValueError('numPointsPerTensor must be equal to the number of tensor in the network')
+        raise ValueError(
+            'numPointsPerTensor must be equal to the number of tensor in the network')
 
     if quantize_first_and_last_layer is False:
         numPointsPerTensor = numPointsPerTensor[1:-1]
 
-    #same scaling function that is used inside nonUniformQUantization. It is important they are the same
-    scalingFunction = quantization.ScalingFunction('linear', False, False, bucket_size, False)
+    # same scaling function that is used inside nonUniformQUantization. It is important they are the same
+    scalingFunction = quantization.ScalingFunction(
+        'linear', False, False, bucket_size, False)
 
-
-    #if assigning bits automatically, use the 2-norm of the gradient to determine weights importance
+    # if assigning bits automatically, use the 2-norm of the gradient to determine weights importance
     if assignBitsAutomatically:
         num_to_estimate_grad = 5
         modelToQuantize.zero_grad()
         for idx_minibatch, batch in enumerate(train_loader, start=1):
             cnn_hf.forward_and_backward(modelToQuantize, batch, idx_batch=idx_minibatch, epoch=0,
-                                                     use_distillation_loss=False)
+                                        use_distillation_loss=False)
             if idx_minibatch >= num_to_estimate_grad:
                 break
 
-        #now we compute the 2-norm of the gradient for each parameter
+        # now we compute the 2-norm of the gradient for each parameter
         fisherInformation = []
         for idx, p in enumerate(modelToQuantize.parameters()):
             if quantize_first_and_last_layer is False:
@@ -501,16 +532,16 @@ def optimize_quantization_points(modelToQuantize, train_loader, test_loader, ini
                     continue
             fisherInformation.append((p.grad.data/num_to_estimate_grad).norm())
 
-        #zero the grad we computed
+        # zero the grad we computed
         modelToQuantize.zero_grad()
 
-        #now we use a simple linear proportion to assign bits
-        #the minimum number of points is half what was given as input
+        # now we use a simple linear proportion to assign bits
+        # the minimum number of points is half what was given as input
         numPointsPerTensor = quantization.help_functions.assign_bits_automatically(fisherInformation,
                                                                                    numPointsPerTensor,
                                                                                    input_is_point=True)
 
-    #initialize the points using the percentile function so as to make them all usable
+    # initialize the points using the percentile function so as to make them all usable
     pointsPerTensor = []
     if initialize_method == 'quantiles':
         for idx, p in enumerate(modelToQuantize.parameters()):
@@ -531,22 +562,29 @@ def optimize_quantization_points(modelToQuantize, train_loader, test_loader, ini
             pointsPerTensor.append(initial_points)
     elif initialize_method == 'uniform':
         for numPoint in numPointsPerTensor:
-            initial_points = torch.FloatTensor([x/(numPoint-1) for x in range(numPoint)])
-            if USE_CUDA: initial_points = initial_points.cuda()
+            initial_points = torch.FloatTensor(
+                [x/(numPoint-1) for x in range(numPoint)])
+            if USE_CUDA:
+                initial_points = initial_points.cuda()
             initial_points = Variable(initial_points, requires_grad=True)
             # do a dummy backprop so that the grad attribute is initialized. We need this because we call
             # the .backward() function manually later on (since pytorch can't assign variables to model
             # parameters)
             initial_points.sum().backward()
             pointsPerTensor.append(initial_points)
-    else: raise ValueError
+    else:
+        raise ValueError
 
-    #dealing with 0 momentum
+    # dealing with 0 momentum
     options_optimizer = {}
-    if initial_momentum != 0: options_optimizer = {'momentum':initial_momentum, 'nesterov':use_nesterov}
-    optimizer = optim.SGD(pointsPerTensor, lr=initial_learning_rate, **options_optimizer)
+    if initial_momentum != 0:
+        options_optimizer = {
+            'momentum': initial_momentum, 'nesterov': use_nesterov}
+    optimizer = optim.SGD(
+        pointsPerTensor, lr=initial_learning_rate, **options_optimizer)
 
-    lr_scheduler = cnn_hf.LearningRateScheduler(initial_learning_rate, learning_rate_style)
+    lr_scheduler = cnn_hf.LearningRateScheduler(
+        initial_learning_rate, learning_rate_style)
     startTime = time.time()
 
     pred_accuracy_epochs = []
@@ -566,7 +604,7 @@ def optimize_quantization_points(modelToQuantize, train_loader, test_loader, ini
         if quantize_first_and_last_layer is False:
             if idx == 0 or idx == numTensorsNetwork - 1:
                 continue
-        #efficient version of nonUniformQuantization
+        # efficient version of nonUniformQuantization
         quant_fun = quantization.nonUniformQuantization_variable(max_element=False, subtract_mean=False,
                                                                  modify_in_place=False, bucket_size=bucket_size,
                                                                  pre_process_tensors=True, tensor=p.data)
@@ -580,36 +618,40 @@ def optimize_quantization_points(modelToQuantize, train_loader, test_loader, ini
         print_loss_total = 0
         for idx_minibatch, data in enumerate(train_loader, start=1):
 
-            #zero the gradient of the parameters model
+            # zero the gradient of the parameters model
             quantizedModel.zero_grad()
             optimizer.zero_grad()
 
-            #quantize the model parameters
+            # quantize the model parameters
             for idx, p_quantized in enumerate(quantizedModel.parameters()):
                 if quantize_first_and_last_layer is False:
                     if idx == 0 or idx == numTensorsNetwork - 1:
                         continue
                     currIdx = idx - 1
-                else: currIdx = idx
-                #efficient quantization
-                p_quantized.data = quantizationFunctions[currIdx].forward(None, pointsPerTensor[currIdx].data)
+                else:
+                    currIdx = idx
+                # efficient quantization
+                p_quantized.data = quantizationFunctions[currIdx].forward(
+                    None, pointsPerTensor[currIdx].data)
 
             print_loss = cnn_hf.forward_and_backward(quantizedModel, data, idx_minibatch, epoch,
-                                        use_distillation_loss=use_distillation_loss,
-                                        teacher_model=modelToQuantize)
+                                                     use_distillation_loss=use_distillation_loss,
+                                                     teacher_model=modelToQuantize)
 
-            #now get the gradient of the pointsPerTensor
+            # now get the gradient of the pointsPerTensor
             for idx, p in enumerate(quantizedModel.parameters()):
                 if quantize_first_and_last_layer is False:
                     if idx == 0 or idx == numTensorsNetwork - 1:
                         continue
                     currIdx = idx - 1
-                else: currIdx = idx
-                pointsPerTensor[currIdx].grad.data = quantizationFunctions[currIdx].backward(p.grad.data)[1]
+                else:
+                    currIdx = idx
+                pointsPerTensor[currIdx].grad.data = quantizationFunctions[currIdx].backward(p.grad.data)[
+                    1]
 
             optimizer.step()
 
-            #after optimzer.step() we need to make sure that the points are still sorted. Implementation detail
+            # after optimzer.step() we need to make sure that the points are still sorted. Implementation detail
             for points in pointsPerTensor:
                 points.data = torch.sort(points.data)[0]
 
@@ -620,17 +662,21 @@ def optimize_quantization_points(modelToQuantize, train_loader, test_loader, ini
                 str_to_print = 'Time Elapsed: {}, [Epoch: {}, Minibatch: {}], loss: {:3f}'.format(
                     mhf.timeSince(startTime), epoch + 1, idx_minibatch, last_loss_saved)
                 if pred_accuracy_epochs:
-                    str_to_print += '. Last prediction accuracy: {:2f}%'.format(pred_accuracy_epochs[-1] * 100)
+                    str_to_print += '. Last prediction accuracy: {:2f}%'.format(
+                        pred_accuracy_epochs[-1] * 100)
                 print(str_to_print)
                 print_loss_total = 0
 
         losses_epochs.append(last_loss_saved)
-        curr_pred_accuracy = evaluateModel(quantizedModel, test_loader, fastEvaluation=False)
+        curr_pred_accuracy = evaluateModel(
+            quantizedModel, test_loader, fastEvaluation=False)
         pred_accuracy_epochs.append(curr_pred_accuracy)
-        print(' === Epoch: {} - prediction accuracy {:2f}% === '.format(epoch + 1, curr_pred_accuracy * 100))
+        print(' === Epoch: {} - prediction accuracy {:2f}% === '.format(epoch +
+                                                                        1, curr_pred_accuracy * 100))
 
         # updating the learning rate
-        new_learning_rate, stop_training = lr_scheduler.update_learning_rate(epoch, 1 - curr_pred_accuracy)
+        new_learning_rate, stop_training = lr_scheduler.update_learning_rate(
+            epoch, 1 - curr_pred_accuracy)
         if stop_training is True:
             break
         for p in optimizer.param_groups:
@@ -642,17 +688,18 @@ def optimize_quantization_points(modelToQuantize, train_loader, test_loader, ini
     print('Finished Training in {} epochs'.format(epoch + 1))
     informationDict = {'predictionAccuracy': pred_accuracy_epochs,
                        'numEpochsTrained': epoch+1,
-                       'lossSaved':losses_epochs}
+                       'lossSaved': losses_epochs}
 
-    #IMPORTANT: When there are batch normalization layers, important information is contained
-    #also in the running mean and runnin var values of the batch normalization layers. Since these are not
-    #parameters, they don't show up in model.parameter() list (and they don't have quantization points
-    #associated with it). So if I return just the optimized quantization points, and quantize the model
-    #weight with them, I will have inferior performance because the running mean and var of the batch normalization
-    #layers won't be saved. To solve this issue I also return the quantized model state dict, that contains
-    #not only the parameter of the models but also this statistics for the batch normalization layers
+    # IMPORTANT: When there are batch normalization layers, important information is contained
+    # also in the running mean and runnin var values of the batch normalization layers. Since these are not
+    # parameters, they don't show up in model.parameter() list (and they don't have quantization points
+    # associated with it). So if I return just the optimized quantization points, and quantize the model
+    # weight with them, I will have inferior performance because the running mean and var of the batch normalization
+    # layers won't be saved. To solve this issue I also return the quantized model state dict, that contains
+    # not only the parameter of the models but also this statistics for the batch normalization layers
 
     return quantizedModel.state_dict(), pointsPerTensor, informationDict
+
 
 def forward_and_backward(model, batch, idx_batch, epoch, criterion=None,
                          use_distillation_loss=False, teacher_model=None,
@@ -662,8 +709,8 @@ def forward_and_backward(model, batch, idx_batch, epoch, criterion=None,
     batch: batch of data
     """
 
-    #TODO: return_more_info is just there for backward compatibility. A big refactoring is due here, and there one should
-    #remove the return_more_info flag
+    # TODO: return_more_info is just there for backward compatibility. A big refactoring is due here, and there one should
+    # remove the return_more_info flag
 
     if criterion is None:
         criterion = nn.CrossEntropyLoss()
@@ -671,7 +718,8 @@ def forward_and_backward(model, batch, idx_batch, epoch, criterion=None,
         criterion = criterion.cuda()
 
     if use_distillation_loss is True and teacher_model is None:
-        raise ValueError('To compute distillation loss you need to pass the teacher model')
+        raise ValueError(
+            'To compute distillation loss you need to pass the teacher model')
 
     if not isinstance(ask_teacher_strategy, tuple):
         ask_teacher_strategy = (ask_teacher_strategy, )
@@ -694,37 +742,43 @@ def forward_and_backward(model, batch, idx_batch, epoch, criterion=None,
     count_asked_teacher = 0
 
     if use_distillation_loss:
-        #if cutoff_entropy_value_distillation is not None, we use the distillation loss only on the examples
-        #whose entropy is higher than the cutoff.
+        # if cutoff_entropy_value_distillation is not None, we use the distillation loss only on the examples
+        # whose entropy is higher than the cutoff.
 
         weight_teacher_loss = 0.7
 
         if 'entropy' in ask_teacher_strategy[0].lower():
             prob_out = torch.nn.functional.softmax(outputs).data
-            entropy = [mhf.get_entropy(prob_out[idx_b, :]) for idx_b in range(prob_out.size(0))]
+            entropy = [mhf.get_entropy(prob_out[idx_b, :])
+                       for idx_b in range(prob_out.size(0))]
 
         if ask_teacher_strategy[0].lower() == 'always':
             mask_distillation_loss = torch.ByteTensor([True]*outputs.size(0))
         elif ask_teacher_strategy[0].lower() == 'cutoff_entropy':
             cutoff_entropy_value_distillation = ask_teacher_strategy[1]
-            mask_distillation_loss = torch.ByteTensor([entr > cutoff_entropy_value_distillation for entr in entropy])
+            mask_distillation_loss = torch.ByteTensor(
+                [entr > cutoff_entropy_value_distillation for entr in entropy])
         elif ask_teacher_strategy[0].lower() == 'random_entropy':
-            max_entropy = math.log2(outputs.size(1)) #max possible entropy that happens with uniform distribution
-            mask_distillation_loss = torch.ByteTensor([random.random() < entr/max_entropy for entr in entropy])
+            # max possible entropy that happens with uniform distribution
+            max_entropy = math.log2(outputs.size(1))
+            mask_distillation_loss = torch.ByteTensor(
+                [random.random() < entr/max_entropy for entr in entropy])
         elif ask_teacher_strategy[0].lower() == 'incorrect_labels':
             _, predictions = outputs.max(dim=1)
             mask_distillation_loss = (predictions != labels).data.cpu()
         else:
             raise ValueError('ask_teacher_strategy is incorrectly formatted')
 
-        #print(mask_distillation_loss.view(-1))
+        # print(mask_distillation_loss.view(-1))
         #print(torch.arange(0, outputs.size(0)).size())
 
-        #print(outputs.size())
+        # print(outputs.size())
         #index_distillation_loss = torch.arange(0, outputs.size(0))[mask_distillation_loss.view(-1, 1)].long()
         #inverse_idx_distill_loss = torch.arange(0, outputs.size(0))[1-mask_distillation_loss.view(-1, 1)].long()
-        index_distillation_loss = torch.arange(0, outputs.size(0))[mask_distillation_loss.view(-1)].long()
-        inverse_idx_distill_loss = torch.arange(0, outputs.size(0))[1-mask_distillation_loss.view(-1)].long()
+        index_distillation_loss = torch.arange(0, outputs.size(0))[
+            mask_distillation_loss.view(-1)].long()
+        inverse_idx_distill_loss = torch.arange(0, outputs.size(0))[
+            1-mask_distillation_loss.view(-1)].long()
         if USE_CUDA:
             index_distillation_loss = index_distillation_loss.cuda()
             inverse_idx_distill_loss = inverse_idx_distill_loss.cuda()
@@ -732,7 +786,8 @@ def forward_and_backward(model, batch, idx_batch, epoch, criterion=None,
         # this criterion is the distillation criterion according to Hinton's paper:
         # "Distilling the Knowledge in a Neural Network", Hinton et al.
 
-        softmaxFunction, logSoftmaxFunction, KLDivLossFunction  = nn.Softmax(dim=1), nn.LogSoftmax(dim=1), nn.KLDivLoss()
+        softmaxFunction, logSoftmaxFunction, KLDivLossFunction = nn.Softmax(
+            dim=1), nn.LogSoftmax(dim=1), nn.KLDivLoss()
         if USE_CUDA:
             softmaxFunction, logSoftmaxFunction = softmaxFunction.cuda(), logSoftmaxFunction.cuda(),
             KLDivLossFunction = KLDivLossFunction.cuda()
@@ -740,21 +795,25 @@ def forward_and_backward(model, batch, idx_batch, epoch, criterion=None,
         if index_distillation_loss.size() != torch.Size():
             count_asked_teacher = index_distillation_loss.numel()
             # if index_distillation_loss is not empty
-            volatile_inputs = Variable(inputs.data[index_distillation_loss, :], requires_grad=False)
-            if USE_CUDA: volatile_inputs = volatile_inputs.cuda()
+            volatile_inputs = Variable(
+                inputs.data[index_distillation_loss, :], requires_grad=False)
+            if USE_CUDA:
+                volatile_inputs = volatile_inputs.cuda()
             outputs_, _, _ = teacher_model(volatile_inputs)
             outputsTeacher = outputs_.detach()
             loss_masked = weight_teacher_loss * temperature_distillation**2 * KLDivLossFunction(
-                    logSoftmaxFunction(outputs[index_distillation_loss, :]/ temperature_distillation),
-                    softmaxFunction(outputsTeacher / temperature_distillation))
+                logSoftmaxFunction(
+                    outputs[index_distillation_loss, :] / temperature_distillation),
+                softmaxFunction(outputsTeacher / temperature_distillation))
             loss_masked += (1-weight_teacher_loss) * criterion(outputs[index_distillation_loss, :],
                                                                labels[index_distillation_loss])
         else:
             loss_masked = 0
 
         if inverse_idx_distill_loss.size() != torch.Size([0]):
-            #if inverse_idx_distill is not empty
-            loss_normal = criterion(outputs[inverse_idx_distill_loss, :], labels[inverse_idx_distill_loss])
+            # if inverse_idx_distill is not empty
+            loss_normal = criterion(
+                outputs[inverse_idx_distill_loss, :], labels[inverse_idx_distill_loss])
         else:
             loss_normal = 0
 
@@ -771,8 +830,8 @@ def forward_and_backward(model, batch, idx_batch, epoch, criterion=None,
     else:
         return loss.data
 
-def evaluateModel(model, testLoader, fastEvaluation=True, maxExampleFastEvaluation=10000, k=1):
 
+def evaluateModel(model, testLoader, fastEvaluation=True, maxExampleFastEvaluation=10000, k=1):
     'if fastEvaluation is True, it will only check a subset of *maxExampleFastEvaluation* images of the test set'
 
     if USE_CUDA:
@@ -785,7 +844,7 @@ def evaluateModel(model, testLoader, fastEvaluation=True, maxExampleFastEvaluati
 
         # get the inputs
         inputs, labels = data
-        inputs = inputs.transpose(2,1)
+        inputs = inputs.transpose(2, 1)
         labels = labels[:, 0]
         inputs, labels = Variable(inputs, volatile=True), Variable(labels)
         if USE_CUDA:
@@ -796,7 +855,8 @@ def evaluateModel(model, testLoader, fastEvaluation=True, maxExampleFastEvaluati
 
         _, topk_predictions = outputs.topk(k, dim=1, largest=True, sorted=True)
         topk_predictions = topk_predictions.t()
-        correct = topk_predictions.eq(labels.view(1, -1).expand_as(topk_predictions))
+        correct = topk_predictions.eq(
+            labels.view(1, -1).expand_as(topk_predictions))
         correctClass += correct.view(-1).float().sum(0, keepdim=True).data[0]
         totalNumExamples += len(labels)
 
@@ -806,10 +866,8 @@ def evaluateModel(model, testLoader, fastEvaluation=True, maxExampleFastEvaluati
     return correctClass / totalNumExamples
 
 
-
-
 if __name__ == '__main__':
-    sim_data = Variable(torch.rand(32,3,2500))
+    sim_data = Variable(torch.rand(32, 3, 2500))
     trans = STN3d()
     out = trans(sim_data)
     print('stn', out.size())
@@ -829,10 +887,10 @@ if __name__ == '__main__':
     out, _, _ = pointfeat(sim_data)
     print('point feat', out.size())
 
-    cls = PointNetCls(k = 5)
+    cls = PointNetCls(k=5)
     out, _, _ = cls(sim_data)
     print('class', out.size())
 
-    seg = PointNetDenseCls(k = 3)
+    seg = PointNetDenseCls(k=3)
     out, _, _ = seg(sim_data)
     print('seg', out.size())
