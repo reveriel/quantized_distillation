@@ -7,7 +7,8 @@ import argparse
 import torch
 import pointnet
 from pointnet.dataset import ShapeNetDataset, ModelNetDataset
-from pointnet.model import PointNetCls, feature_transform_regularizer
+from pointnet.model import feature_transform_regularizer
+import pointnet.student as student
 
 
 def __mkdir(path):
@@ -22,7 +23,7 @@ batch_size = 50
 epochsToTrain = 100
 TRAIN_TEACHER_MODEL = False
 TRAIN_SMALLER_MODEL = False
-TRAIN_DISTILLED_MODEL = False
+TRAIN_DISTILLED_MODEL = True
 TRAIN_DISTILLED_QUANTIZED_MODEL = False
 
 # cifar10 = datasets.CIFAR10() #->
@@ -110,7 +111,7 @@ else:
 # =============================================================================
 model_name = 'pointnetcls_teacher'
 teacherModelPath = os.path.join(model_save_path, model_name)
-classifier = PointNetCls(
+classifier = pointnet.model.PointNetCls(
     k=num_classes, feature_transform=opt.feature_transform)
 teacherModel = classifier
 print(pointNetManager.saved_models)
@@ -148,23 +149,20 @@ teacherModel.load_state_dict(pointNetManager.load_model_state_dict(model_name))
 acc = pointnet.model.evaluateModel(teacherModel, test_loader, k=1)
 print("Top-1 eval acc is {}".format(acc))
 
+# =============================================================================
+# smaller
+# =============================================================================
+
 small_model_name = "small_pointnet_same"
 smallerModelPath = os.path.join(model_save_path, small_model_name)
-smallerModel = PointNetCls(
+smallerModel = pointnet.model.PointNetCls(
     k=num_classes, feature_transform=opt.feature_transform)
 
-# smallerModel = convForwModel.ConvolForwardNet(**model_small_spec,
-#                                               useBatchNorm=True,
-#                                               useAffineTransformInBatchNorm=True)
 if not small_model_name in pointNetManager.saved_models:
     pointNetManager.add_new_model(small_model_name, smallerModelPath,
                                   arguments_creator_function={'k': num_classes,
                                                               'feature_transform': opt.feature_transform})
-#                                                              'useAffineTransformInBatchNorm': True})
 
-# =============================================================================
-# smaller
-# =============================================================================
 if TRAIN_SMALLER_MODEL:
     pointNetManager.train_model(smallerModel, model_name=small_model_name,
                                 train_function=pointnet.model.train_model,
@@ -180,14 +178,19 @@ if TRAIN_SMALLER_MODEL:
 # =============================================================================
 # distill
 # =============================================================================
+
 distilled_model_name = 'distill_pointnet'
 # distilledModelSpec = copy.deepcopy(smallerModelSpec2)
 # no dropout with distilled model
 # distilledModelSpec['spec_dropout_rates'] = []
 
 distilledModelPath = os.path.join(model_save_path, distilled_model_name)
-distilledModel = PointNetCls(
+distilledModel = student.PointNetCls(
     k=num_classes, feature_transform=opt.feature_transform)
+
+if distilled_model_name in pointNetManager.saved_models:
+    pointNetManager.remove_model(distilled_model_name, delete_files=True)
+    exit(0)
 
 if not distilled_model_name in pointNetManager.saved_models:
     pointNetManager.add_new_model(distilled_model_name, distilledModelPath,

@@ -3,18 +3,14 @@ import torch
 import torch.nn as nn
 import torch.nn.parallel
 import torch.utils.data
-from torch.autograd import Variable
 import numpy as np
 import torch.nn.functional as F
 from torch.autograd import Variable
-import torch.nn as nn
-import torch.nn.functional as Functional
 import time
 import torch.optim as optim
 from torch.nn.init import xavier_uniform, calculate_gain
 import math
 import copy
-import numpy as np
 import helpers.functions as mhf
 import cnn_models.help_fun as cnn_hf
 import quantization
@@ -24,17 +20,8 @@ USE_CUDA = torch.cuda.is_available()
 
 
 class STN3d(nn.Module):
-    def __init__(self, conv_widths=[64, 128, 1024],  fc_widths=[1024, 512, 256]):
-        # input : a tensor of n * 3
-        # output: a 3 x 3 matrix
+    def __init__(self):
         super(STN3d, self).__init__()
-        assert len(conv_widths) > 0 and  len(fc_widths) > 0 and conv_widths[-1] == fc_widths[0]
-        self.convs = []
-        self.convs.append(torch.nn.Conv1d(3, conv_width[]))
-
-        for i in range(len(conv_widths)):
-            self.convs.append(torch.nn.Conv1d(conv_widhth, width, i))
-
         self.conv1 = torch.nn.Conv1d(3, 64, 1)
         self.conv2 = torch.nn.Conv1d(64, 128, 1)
         self.conv3 = torch.nn.Conv1d(128, 1024, 1)
@@ -154,28 +141,6 @@ class PointNetfeat(nn.Module):
 
 
 class PointNetCls(nn.Module):
-    def __init__(self, k=2, feature_transform=False):
-        super(PointNetCls, self).__init__()
-        self.feature_transform = feature_transform
-        self.feat = PointNetfeat(
-            global_feat=True, feature_transform=feature_transform)
-        self.fc1 = nn.Linear(1024, 512)
-        self.fc2 = nn.Linear(512, 256)
-        self.fc3 = nn.Linear(256, k)
-        self.dropout = nn.Dropout(p=0.3)
-        self.bn1 = nn.BatchNorm1d(512)
-        self.bn2 = nn.BatchNorm1d(256)
-        self.relu = nn.ReLU()
-
-    def forward(self, x):
-        x, trans, trans_feat = self.feat(x)
-        x = F.relu(self.bn1(self.fc1(x)))
-        x = F.relu(self.bn2(self.dropout(self.fc2(x))))
-        x = self.fc3(x)
-        return F.log_softmax(x, dim=1), trans, trans_feat
-
-
-class PointNetCls_small(nn.Module):
     def __init__(self, k=2, feature_transform=False):
         super(PointNetCls, self).__init__()
         self.feature_transform = feature_transform
