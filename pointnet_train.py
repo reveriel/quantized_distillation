@@ -19,10 +19,10 @@ def __mkdir(path):
 
 batch_size = 50
 # epochsToTrainCIFAR = 100
-epochsToTrain = 10
+epochsToTrain = 100
 TRAIN_TEACHER_MODEL = False
+TRAIN_SMALLER_MODEL = False
 TRAIN_DISTILLED_MODEL = False
-TRAIN_SMALLER_MODEL = True
 TRAIN_DISTILLED_QUANTIZED_MODEL = False
 
 # cifar10 = datasets.CIFAR10() #->
@@ -75,8 +75,6 @@ else:
     exit('wrong dataset type')
 
 
-# train_loader, test_loader = cifar10.getTrainLoader(batch_size), cifar10.getTestLoader(batch_size)
-
 train_loader = torch.utils.data.DataLoader(
     dataset, batch_size=opt.batchSize, shuffle=True, num_workers=int(opt.workers))
 
@@ -92,6 +90,9 @@ try:
 except OSError:
     pass
 
+# =============================================================================
+# manager
+# =============================================================================
 model_manager_path = 'model_manager_pointnetcls.tst'
 manager_name = "mg_pointnetcls"
 model_save_path = 'models'
@@ -104,6 +105,9 @@ else:
     pointNetManager = model_manager.ModelManager(model_manager_path,
                                                  manager_name, create_new_model_manager=True)  # the first t
 
+# =============================================================================
+# teacher
+# =============================================================================
 model_name = 'pointnetcls_teacher'
 teacherModelPath = os.path.join(model_save_path, model_name)
 classifier = PointNetCls(
@@ -158,6 +162,9 @@ if not small_model_name in pointNetManager.saved_models:
                                                               'feature_transform': opt.feature_transform})
 #                                                              'useAffineTransformInBatchNorm': True})
 
+# =============================================================================
+# smaller
+# =============================================================================
 if TRAIN_SMALLER_MODEL:
     pointNetManager.train_model(smallerModel, model_name=small_model_name,
                                 train_function=pointnet.model.train_model,
@@ -170,7 +177,9 @@ if TRAIN_SMALLER_MODEL:
     acc = pointnet.model.evaluateModel(smallerModel, test_loader, k=1)
     print("Top-1 eval acc of smaller model is {}".format(acc))
 
-
+# =============================================================================
+# distill
+# =============================================================================
 distilled_model_name = 'distill_pointnet'
 # distilledModelSpec = copy.deepcopy(smallerModelSpec2)
 # no dropout with distilled model
@@ -185,7 +194,6 @@ if not distilled_model_name in pointNetManager.saved_models:
                                   arguments_creator_function={'k': num_classes, 'feature_transform': opt.feature_transform})
 
 if TRAIN_DISTILLED_MODEL:
-
     pointNetManager.train_model(distilledModel, model_name=distilled_model_name,
                                 train_function=pointnet.model.train_model,
                                 arguments_train_function={'epochs_to_train': epochsToTrain,
@@ -202,6 +210,9 @@ acc = pointnet.model.evaluateModel(distilledModel, test_loader, k=1)
 print("Top-1 eval acc is {}".format(acc))
 
 
+# =============================================================================
+# distill quantized
+# =============================================================================
 if TRAIN_DISTILLED_QUANTIZED_MODEL:
     numBits = [8]
     for numBit in numBits:

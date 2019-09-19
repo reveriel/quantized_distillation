@@ -24,8 +24,11 @@ USE_CUDA = torch.cuda.is_available()
 
 
 class STN3d(nn.Module):
-    def __init__(self):
+    def __init__(self, conv_widths = [64,128,1024],  fc_widths = [1024,512,256]):
+        # conv_width :
+        #
         super(STN3d, self).__init__()
+
         self.conv1 = torch.nn.Conv1d(3, 64, 1)
         self.conv2 = torch.nn.Conv1d(64, 128, 1)
         self.conv3 = torch.nn.Conv1d(128, 1024, 1)
@@ -739,7 +742,8 @@ def forward_and_backward(model, batch, idx_batch, epoch, criterion=None,
             # if index_distillation_loss is not empty
             volatile_inputs = Variable(inputs.data[index_distillation_loss, :], requires_grad=False)
             if USE_CUDA: volatile_inputs = volatile_inputs.cuda()
-            outputsTeacher = teacher_model(volatile_inputs).detach()
+            outputs_, _, _ = teacher_model(volatile_inputs)
+            outputsTeacher = outputs_.detach()
             loss_masked = weight_teacher_loss * temperature_distillation**2 * KLDivLossFunction(
                     logSoftmaxFunction(outputs[index_distillation_loss, :]/ temperature_distillation),
                     softmaxFunction(outputsTeacher / temperature_distillation))
