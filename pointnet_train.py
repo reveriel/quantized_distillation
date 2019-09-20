@@ -188,9 +188,9 @@ distilledModelPath = os.path.join(model_save_path, distilled_model_name)
 distilledModel = student.PointNetCls(
     k=num_classes, feature_transform=opt.feature_transform)
 
-if distilled_model_name in pointNetManager.saved_models:
-    pointNetManager.remove_model(distilled_model_name, delete_files=True)
-    exit(0)
+# if distilled_model_name in pointNetManager.saved_models:
+#     pointNetManager.remove_model(distilled_model_name, delete_files=True)
+#     exit(0)
 
 if not distilled_model_name in pointNetManager.saved_models:
     pointNetManager.add_new_model(distilled_model_name, distilledModelPath,
