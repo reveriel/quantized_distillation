@@ -8,6 +8,7 @@ import torch
 import pointnet
 from pointnet.dataset import ShapeNetDataset, ModelNetDataset
 from pointnet.model import feature_transform_regularizer
+import pointnet.pointnet_spec as spec
 import pointnet.student as student
 
 
@@ -20,7 +21,7 @@ def __mkdir(path):
 
 batch_size = 50
 # epochsToTrainCIFAR = 100
-epochsToTrain = 100
+epochsToTrain = 50
 TRAIN_TEACHER_MODEL = False
 TRAIN_SMALLER_MODEL = False
 TRAIN_DISTILLED_MODEL = True
@@ -179,38 +180,41 @@ if TRAIN_SMALLER_MODEL:
 # distill
 # =============================================================================
 
-distilled_model_name = 'distill_pointnet'
+specs = [spec.spec2, spec.spec3, spec.spec4, spec.spec5]
+
+
 # distilledModelSpec = copy.deepcopy(smallerModelSpec2)
 # no dropout with distilled model
 # distilledModelSpec['spec_dropout_rates'] = []
 
-distilledModelPath = os.path.join(model_save_path, distilled_model_name)
-distilledModel = student.PointNetCls(
-    k=num_classes, feature_transform=opt.feature_transform)
+for i in range(len(specs)):
+    distilled_model_name = "distill_pointnet_spec" + str(i+2)
+    distilledModelPath = os.path.join(model_save_path, distilled_model_name)
+    distilledModel = student.PointNetCls(
+        k=num_classes, feature_transform=opt.feature_transform, spec=specs[i])
+    # if distilled_model_name in pointNetManager.saved_models:
+    #     pointNetManager.remove_model(distilled_model_name, delete_files=True)
+    #     exit(0)
 
-# if distilled_model_name in pointNetManager.saved_models:
-#     pointNetManager.remove_model(distilled_model_name, delete_files=True)
-#     exit(0)
+    if not distilled_model_name in pointNetManager.saved_models:
+        pointNetManager.add_new_model(distilled_model_name, distilledModelPath,
+                                      arguments_creator_function={'k': num_classes, 'feature_transform': opt.feature_transform})
 
-if not distilled_model_name in pointNetManager.saved_models:
-    pointNetManager.add_new_model(distilled_model_name, distilledModelPath,
-                                  arguments_creator_function={'k': num_classes, 'feature_transform': opt.feature_transform})
+    if TRAIN_DISTILLED_MODEL:
+        pointNetManager.train_model(distilledModel, model_name=distilled_model_name,
+                                    train_function=pointnet.model.train_model,
+                                    arguments_train_function={'epochs_to_train': epochsToTrain,
+                                                              'teacher_model': teacherModel,
+                                                              'use_distillation_loss': True},
+                                    train_loader=train_loader, test_loader=test_loader)
+        print("DISTILLED Model Training complete")
 
-if TRAIN_DISTILLED_MODEL:
-    pointNetManager.train_model(distilledModel, model_name=distilled_model_name,
-                                train_function=pointnet.model.train_model,
-                                arguments_train_function={'epochs_to_train': epochsToTrain,
-                                                          'teacher_model': teacherModel,
-                                                          'use_distillation_loss': True},
-                                train_loader=train_loader, test_loader=test_loader)
-    print("DISTILLED Model Training complete")
+    print("Eval DISTILLED model")
 
-print("Eval DISTILLED model")
-
-distilledModel.load_state_dict(
-    pointNetManager.load_model_state_dict(distilled_model_name))
-acc = pointnet.model.evaluateModel(distilledModel, test_loader, k=1)
-print("Top-1 eval acc is {}".format(acc))
+    distilledModel.load_state_dict(
+        pointNetManager.load_model_state_dict(distilled_model_name))
+    acc = pointnet.model.evaluateModel(distilledModel, test_loader, k=1)
+    print("Top-1 eval acc is {}".format(acc))
 
 
 # =============================================================================

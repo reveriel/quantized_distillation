@@ -17,11 +17,12 @@ USE_CUDA = torch.cuda.is_available()
 
 
 class STN3d(nn.Module):
-
-    def __init__(self,
-                 convs=[(3, 64, 1), (64, 128, 1), (128, 1024, 1)],
-                 fcs=[(1024, 512), (512, 256), (256, 9)]):
+    def __init__(self, spec={
+            'convs': [(3, 64, 1), (64, 128, 1), (128, 1024, 1)],
+            'fcs': [(1024, 512), (512, 256), (256, 3 * 3)]}):
         super(STN3d, self).__init__()
+        convs = spec['convs']
+        fcs = spec['fcs']
         self.k = convs[0][0]
 
         # convs
@@ -55,27 +56,34 @@ class STN3d(nn.Module):
 
 class PointNetfeat(nn.Module):
     def __init__(self, global_feat=True, feature_transform=False,
-                 conv=[(3, 64, 1), (64, 128, 1), (128, 1024, 1)],
-                 skip_branch=1
-                 ):
+                 spec={
+                     'spec_stn3d': {
+                         'convs': [(3, 64, 1), (64, 128, 1), (128, 1024, 1)],
+                         'fcs': [(1024, 512), (512, 256), (256, 3 * 3)]
+                     },
+                     'spec_stnkd': {
+                         'convs': [(64, 64, 1), (64, 128, 1), (128, 1024, 1)],
+                         'fcs': [(1024, 512), (512, 256), (256, 64 * 64)]
+                     },
+                     'skip_branch': 1,
+                     'convs' : [(3,64,1), (64,128,1), (128,1024,1)]
+                 }):
+        conv = spec['convs']
 
-        self.skip_branch = skip_branch # before which conv layer, the input to that layer
-                                # will be branched out and concateated to end
+        self.skip_branch = spec['skip_branch']  # before which conv layer, the input to that layer
+                         # will be branched out and concateated to end
         super(PointNetfeat, self).__init__()
-        self.stn = STN3d(convs=[(3, 64, 1), (64, 128, 1), (128, 1024, 1)],
-                         fcs=[(1024, 512), (512, 256), (256, 3 * 3)])
-
+        self.stn = STN3d(spec=spec['spec_stn3d'])
         self.global_feat = global_feat
         self.feature_transform = feature_transform
         if self.feature_transform:
-            self.fstn = STNkd(convs=[(64, 64, 1), (64, 128, 1), (128, 1024, 1)],
-                              fcs=[(1024, 512), (512, 256), (256, 64 * 64)])
+            self.fstn = STNkd(spec=spec['spec_stnkd'])
         self.layers = nn.ModuleList()
         for i in range(len(conv)):
             self.layers.append(nn.Conv1d(*conv[i]))
             self.layers.append(nn.BatchNorm1d(conv[i][1]))
             if i == len(conv) - 1:
-                break # no last layer relu
+                break  # no last layer relu
             self.layers.append(nn.ReLU())
 
     def forward(self, x):
@@ -94,7 +102,7 @@ class PointNetfeat(nn.Module):
             x = torch.bmm(trans_feat.transpose(2, 1), x)
         else:
             trans_feat = None
-        pointfeat = x # skip
+        pointfeat = x  # skip
 
         for i, l in enumerate(self.layers):
             if i <= self.skip_branch * 3:
@@ -112,11 +120,11 @@ class PointNetfeat(nn.Module):
 
 
 class PointNetCls(nn.Module):
-    def __init__(self, k=2, feature_transform=False):
+    def __init__(self, k=2, feature_transform=False, spec={}):
         super(PointNetCls, self).__init__()
         self.feature_transform = feature_transform
         self.feat = PointNetfeat(
-            global_feat=True, feature_transform=feature_transform)
+            global_feat=True, feature_transform=feature_transform, spec=spec)
         self.fc1 = nn.Linear(1024, 512)
         self.fc2 = nn.Linear(512, 256)
         self.fc3 = nn.Linear(256, k)
@@ -152,8 +160,11 @@ if __name__ == '__main__':
     print('loss', feature_transform_regularizer(out))
 
     sim_data_64d = torch.rand(32, 64, 2500, requires_grad=True)
-    trans = STN3d(convs=[(64, 64, 1), (64, 128, 1), (128, 1024, 1)],
-                  fcs=[(1024, 512), (512, 256), (256, 64 * 64)])
+    trans = STN3d(
+        spec={
+            'convs': [(64, 64, 1), (64, 128, 1), (128, 1024, 1)],
+            'fcs': [(1024, 512), (512, 256), (256, 64 * 64)]
+        })
     out = trans(sim_data_64d)
     print('stn64d', out.size())
     print('loss', feature_transform_regularizer(out))
@@ -166,9 +177,23 @@ if __name__ == '__main__':
     out, _, _ = pointfeat(sim_data)
     print('point feat', out.size())
 
-    cls = PointNetCls(k=5)
+    spec1 = {
+        'spec_stn3d': {
+            'convs': [(3, 64, 1), (64, 128, 1), (128, 1024, 1)],
+            'fcs': [(1024, 512), (512, 256), (256, 3 * 3)]
+        },
+        'spec_stnkd': {
+            'conv': [(64, 64, 1), (64, 128, 1), (128, 1024, 1)],
+            'fcs': [(1024, 512), (512, 256), (256, 64 * 64)]
+        },
+        'skip_branch': 1,
+        'convs': [(3, 64, 1), (64, 128, 1), (128, 1024, 1)],
+    }
+
+    cls = PointNetCls(k=5, spec=spec1)
     out, _, _ = cls(sim_data)
     print('class', out.size())
+
 
     # seg = PointNetDenseCls(k=3)
     # out, _, _ = seg(sim_data)
